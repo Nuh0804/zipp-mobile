@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart' as loc;
@@ -21,7 +22,7 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final Completer<GoogleMapController> _controller = Completer();
   final loc.Location _location = loc.Location();
 
@@ -32,29 +33,91 @@ class _MapScreenState extends State<MapScreen> {
   String _selectedAddress = '';
   bool _isLoading = true;
   bool _isMyLocationAvailable = false;
+  String _debugInfo = '';
+  bool _mapInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Optimize display for maps
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+
+    // Set system UI for better map visibility
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+    ));
+
     _getCurrentLocation();
     if (widget.initialText.isNotEmpty) {
       _getLocationFromAddress(widget.initialText);
     } else {
       // Use the placeholder text if available
-      _selectedAddress = widget.isPickup ? 'dec' : 'css';
+      _selectedAddress = widget.isPickup ? 'Pickup location' : 'Destination';
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Handle app resuming from background
+    if (state == AppLifecycleState.resumed && _mapInitialized) {
+      _refreshMap();
+    }
+  }
+
+  Future<void> _refreshMap() async {
+    try {
+      final GoogleMapController controller = await _controller.future;
+      controller.setMapStyle('[]'); // Reset map style
+
+      // Move camera to refresh the view
+      controller.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _selectedLocation,
+          zoom: 15,
+        ),
+      ));
+    } catch (e) {
+      _addDebugInfo('Error refreshing map: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+
+    // Restore system settings
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    super.dispose();
   }
 
   Future<void> _getCurrentLocation() async {
     try {
-      bool serviceEnabled;
-      loc.PermissionStatus permissionGranted;
+      _addDebugInfo('Requesting location services...');
 
       // Check if location services are enabled
-      serviceEnabled = await _location.serviceEnabled();
+      bool serviceEnabled = await _location.serviceEnabled();
+      _addDebugInfo('Location services enabled: $serviceEnabled');
+
       if (!serviceEnabled) {
+        _addDebugInfo('Requesting to enable location services...');
         serviceEnabled = await _location.requestService();
+        _addDebugInfo(
+            'User response to location service request: $serviceEnabled');
+
         if (!serviceEnabled) {
+          _addDebugInfo('User denied location services');
+          _showErrorMessage(
+              'Location services are disabled. Please enable location services in your device settings.');
           setState(() {
             _isLoading = false;
           });
@@ -63,10 +126,20 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       // Check if permission is granted
-      permissionGranted = await _location.hasPermission();
+      _addDebugInfo('Checking location permission...');
+      loc.PermissionStatus permissionGranted = await _location.hasPermission();
+      _addDebugInfo('Current permission status: $permissionGranted');
+
       if (permissionGranted == loc.PermissionStatus.denied) {
+        _addDebugInfo('Permission denied, requesting permission...');
         permissionGranted = await _location.requestPermission();
+        _addDebugInfo(
+            'User response to permission request: $permissionGranted');
+
         if (permissionGranted != loc.PermissionStatus.granted) {
+          _addDebugInfo('User denied permission');
+          _showErrorMessage(
+              'Location permission denied. Please grant location permission in your device settings.');
           setState(() {
             _isLoading = false;
           });
@@ -75,12 +148,16 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       // Get current location
+      _addDebugInfo('Getting current location...');
       final loc.LocationData locationData = await _location.getLocation();
       double? lat = locationData.latitude;
       double? lng = locationData.longitude;
+      _addDebugInfo('Location data received: lat=$lat, lng=$lng');
 
       if (lat == null || lng == null) {
-        print("Location data has null values: lat=$lat, lng=$lng");
+        _addDebugInfo('Location data has null values');
+        _showErrorMessage(
+            'Could not get your location coordinates. Please try again.');
         setState(() {
           _isLoading = false;
         });
@@ -88,6 +165,7 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       final LatLng userLocation = LatLng(lat, lng);
+      _addDebugInfo('User location set to: $lat, $lng');
 
       setState(() {
         _center = userLocation;
@@ -99,6 +177,7 @@ class _MapScreenState extends State<MapScreen> {
 
       // Move camera to current location
       try {
+        _addDebugInfo('Moving camera to user location...');
         final GoogleMapController controller = await _controller.future;
         controller.animateCamera(CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -107,12 +186,15 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ));
       } catch (e) {
+        _addDebugInfo('Error animating camera: $e');
         print('Error animating camera: $e');
       }
 
       // Get address from location
+      _addDebugInfo('Getting address from coordinates...');
       await _getAddressFromLatLng(_selectedLocation);
     } catch (e) {
+      _addDebugInfo('Error getting location: $e');
       print('Error getting location: $e');
 
       if (mounted) {
@@ -121,15 +203,50 @@ class _MapScreenState extends State<MapScreen> {
         });
 
         // Show error message to user
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Unable to get your current location: ${e.toString()}'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        _showErrorMessage(
+            'Unable to get your current location: ${e.toString()}');
       }
     }
+  }
+
+  void _addDebugInfo(String info) {
+    print('DEBUG: $info');
+    if (mounted) {
+      setState(() {
+        _debugInfo += '• $info\n';
+      });
+    }
+  }
+
+  void _showErrorMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Details',
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Location Debug Info'),
+                content: SingleChildScrollView(
+                  child: Text(_debugInfo),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _getLocationFromAddress(String address) async {
@@ -285,7 +402,31 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 36), // For balance
+                    IconButton(
+                      icon: const Icon(
+                        Icons.info_outline,
+                        color: Colors.white,
+                      ),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Location Debug Info'),
+                            content: SingleChildScrollView(
+                              child: Text(_debugInfo.isEmpty
+                                  ? 'No debug information available yet.'
+                                  : _debugInfo),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ],
@@ -299,48 +440,61 @@ class _MapScreenState extends State<MapScreen> {
                 // Actual Google Map
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : GoogleMap(
-                        onMapCreated: (GoogleMapController controller) {
-                          _controller.complete(controller);
-                        },
-                        initialCameraPosition: CameraPosition(
-                          target: _center,
-                          zoom: 15,
-                        ),
-                        markers: {
-                          Marker(
-                            markerId: const MarkerId('selected_location'),
-                            position: _selectedLocation,
-                            icon: BitmapDescriptor.defaultMarkerWithHue(
-                              widget.isPickup
-                                  ? BitmapDescriptor.hueGreen
-                                  : BitmapDescriptor.hueRed,
-                            ),
-                            infoWindow: InfoWindow(
-                              title: widget.isPickup
-                                  ? 'Pickup Location'
-                                  : 'Destination',
-                              snippet: _selectedAddress,
-                            ),
+                    : RepaintBoundary(
+                        child: GoogleMap(
+                          mapType: MapType.normal,
+                          onMapCreated: (GoogleMapController controller) {
+                            _controller.complete(controller);
+                            setState(() {
+                              _mapInitialized = true;
+                            });
+                            _addDebugInfo('Map created successfully');
+                          },
+                          initialCameraPosition: CameraPosition(
+                            target: _center,
+                            zoom: 15,
                           ),
-                          if (_currentUserLocation != null &&
-                              _selectedLocation != _currentUserLocation)
+                          markers: {
                             Marker(
-                              markerId: const MarkerId('current_location'),
-                              position: _currentUserLocation!,
+                              markerId: const MarkerId('selected_location'),
+                              position: _selectedLocation,
                               icon: BitmapDescriptor.defaultMarkerWithHue(
-                                  BitmapDescriptor.hueAzure),
-                              infoWindow: const InfoWindow(
-                                title: 'Your Location',
+                                widget.isPickup
+                                    ? BitmapDescriptor.hueGreen
+                                    : BitmapDescriptor.hueRed,
+                              ),
+                              infoWindow: InfoWindow(
+                                title: widget.isPickup
+                                    ? 'Pickup Location'
+                                    : 'Destination',
+                                snippet: _selectedAddress,
                               ),
                             ),
-                        },
-                        myLocationEnabled: true,
-                        myLocationButtonEnabled: true,
-                        onTap: _onMapTapped,
-                        zoomControlsEnabled: true,
-                        mapToolbarEnabled: true,
-                        compassEnabled: true,
+                            if (_currentUserLocation != null &&
+                                _selectedLocation != _currentUserLocation)
+                              Marker(
+                                markerId: const MarkerId('current_location'),
+                                position: _currentUserLocation!,
+                                icon: BitmapDescriptor.defaultMarkerWithHue(
+                                    BitmapDescriptor.hueAzure),
+                                infoWindow: const InfoWindow(
+                                  title: 'Your Location',
+                                ),
+                              ),
+                          },
+                          myLocationEnabled: true,
+                          myLocationButtonEnabled: true,
+                          onTap: _onMapTapped,
+                          zoomControlsEnabled: true,
+                          mapToolbarEnabled: true,
+                          compassEnabled: true,
+                          trafficEnabled: false,
+                          buildingsEnabled: true,
+                          rotateGesturesEnabled: true,
+                          scrollGesturesEnabled: true,
+                          zoomGesturesEnabled: true,
+                          tiltGesturesEnabled: true,
+                        ),
                       ),
 
                 // Use Current Location button
@@ -432,6 +586,19 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ],
       ),
+      floatingActionButton: !_isLoading && !_isMyLocationAvailable
+          ? FloatingActionButton(
+              onPressed: () {
+                _getCurrentLocation();
+                // Also attempt to refresh the map
+                if (_mapInitialized) {
+                  _refreshMap();
+                }
+              },
+              backgroundColor: AppColors.actionBlue,
+              child: const Icon(Icons.my_location),
+            )
+          : null,
     );
   }
 }

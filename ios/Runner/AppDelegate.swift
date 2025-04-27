@@ -8,10 +8,12 @@ import GoogleMaps
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Access API key from environment
-    // In a real app, use a proper configuration management system 
-    // For demo, you would replace this with your actual key during build
-    GMSServices.provideAPIKey(ProcessInfo.processInfo.environment["MAPS_API_KEY"] ?? "")
+    // Configure Google Maps API Key
+    GMSServices.provideAPIKey("AIzaSyDqOt-pE0JObnX_UaZXO6-3Pih953Kc5Ho")
+    
+    // Set the default Map ID for advanced features
+    GMSMapID.init(identifier: "a11b0e9d62ccce5e")
+    
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

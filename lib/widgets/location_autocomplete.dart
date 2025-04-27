@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_google_places/flutter_google_places.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:google_maps_webservice/places.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../config/app_config.dart';
@@ -27,37 +25,42 @@ class LocationAutocomplete extends StatelessWidget {
   }) : super(key: key);
 
   Future<void> _handlePressButton(BuildContext context) async {
-    // Initialize the Places API with your API key
-    final GoogleMapsPlaces _places = GoogleMapsPlaces(
-      apiKey: AppConfig.placesApiKey,
-    );
-
-    // Show the autocomplete search dialog
-    Prediction? p = await PlacesAutocomplete.show(
+    // Show a simple search dialog instead of using Places API
+    final String? result = await showDialog<String>(
       context: context,
-      apiKey: AppConfig.placesApiKey,
-      mode: Mode.overlay, // Mode.fullscreen or Mode.overlay
-      language: "en",
-      components: [
-        Component(Component.country, "us")
-      ], // Limit to specific country
-      types: [], // You can specify place types e.g., ["address", "establishment"]
-      strictbounds: false,
-      hint: "Search for a location",
+      builder: (BuildContext context) {
+        final TextEditingController searchController = TextEditingController();
+        return AlertDialog(
+          title: Text('Search Location'),
+          content: TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              hintText: 'Enter a location',
+              prefixIcon: Icon(Icons.search),
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (searchController.text.isNotEmpty) {
+                  Navigator.pop(context, searchController.text);
+                }
+              },
+              child: Text('Select'),
+            ),
+          ],
+        );
+      },
     );
 
-    // Handle the selected prediction
-    if (p != null) {
-      // Get details of the selected place
-      PlacesDetailsResponse detail =
-          await _places.getDetailsByPlaceId(p.placeId!);
-      final address = detail.result.formattedAddress;
-
-      // Update the controller and call the callback
-      if (address != null) {
-        controller.text = address;
-        onLocationSelected(address);
-      }
+    if (result != null && result.isNotEmpty) {
+      controller.text = result;
+      onLocationSelected(result);
     }
   }
 

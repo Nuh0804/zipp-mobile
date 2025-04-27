@@ -1,13 +1,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Location permissions -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    
     <application
         android:label="zipp_logistics"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true">
         
         <!-- Google Maps API Key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="MAPS_API_KEY" />
+            android:value="AIzaSyDqOt-pE0JObnX_UaZXO6-3Pih953Kc5Ho" />
+            
+        <!-- Google Maps Map ID -->
+        <meta-data
+            android:name="com.google.android.geo.MAP_ID"
+            android:value="a11b0e9d62ccce5e" />
             
         <activity
             android:name=".MainActivity"
@@ -48,7 +62,4 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
-    <!-- Location permissions -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 </manifest>

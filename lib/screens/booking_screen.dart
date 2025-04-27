@@ -21,6 +21,28 @@ class _BookingScreenState extends State<BookingScreen> {
   final TextEditingController _destinationController = TextEditingController();
   final loc.Location _location = loc.Location();
   bool _isLocationLoading = false;
+  String _locationErrorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize location settings when the app starts
+    _initializeLocationSettings();
+  }
+
+  Future<void> _initializeLocationSettings() async {
+    try {
+      // This will trigger the permission request dialogs early
+      await _location.requestPermission();
+      await _location.requestService();
+      await _location.changeSettings(
+        accuracy: loc.LocationAccuracy.high,
+        interval: 1000,
+      );
+    } catch (e) {
+      print('Error initializing location settings: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -55,16 +77,25 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _useCurrentLocation(bool isPickup) async {
     setState(() {
       _isLocationLoading = true;
+      _locationErrorMessage = '';
     });
 
     try {
+      print('Starting current location process...');
+
       // Check if location services are enabled
       bool serviceEnabled = await _location.serviceEnabled();
+      print('Location services enabled: $serviceEnabled');
+
       if (!serviceEnabled) {
         serviceEnabled = await _location.requestService();
+        print('User response to location service request: $serviceEnabled');
+
         if (!serviceEnabled) {
-          _showErrorMessage(
-              'Location services are disabled. Please enable them to use this feature.');
+          _locationErrorMessage =
+              'Location services are disabled. Please enable them in your device settings.';
+          print(_locationErrorMessage);
+          _showErrorMessage(_locationErrorMessage);
           setState(() {
             _isLocationLoading = false;
           });
@@ -74,11 +105,18 @@ class _BookingScreenState extends State<BookingScreen> {
 
       // Check if permission is granted
       loc.PermissionStatus permissionGranted = await _location.hasPermission();
+      print('Current permission status: $permissionGranted');
+
       if (permissionGranted == loc.PermissionStatus.denied) {
+        print('Permission denied, requesting permission...');
         permissionGranted = await _location.requestPermission();
+        print('User response to permission request: $permissionGranted');
+
         if (permissionGranted != loc.PermissionStatus.granted) {
-          _showErrorMessage(
-              'Location permission denied. Please grant permission to use this feature.');
+          _locationErrorMessage =
+              'Location permission denied. Please grant permission in your device settings.';
+          print(_locationErrorMessage);
+          _showErrorMessage(_locationErrorMessage);
           setState(() {
             _isLocationLoading = false;
           });
@@ -86,14 +124,22 @@ class _BookingScreenState extends State<BookingScreen> {
         }
       }
 
+      // Ensure high accuracy
+      await _location.changeSettings(accuracy: loc.LocationAccuracy.high);
+      print('Setting high accuracy location');
+
       // Get current location
+      print('Getting current location...');
       final loc.LocationData locationData = await _location.getLocation();
       double? lat = locationData.latitude;
       double? lng = locationData.longitude;
+      print('Location data received: lat=$lat, lng=$lng');
 
       if (lat == null || lng == null) {
-        _showErrorMessage(
-            'Could not get your current location. Please try again.');
+        _locationErrorMessage =
+            'Could not get your current location. Please try again.';
+        print('Location data has null values: lat=$lat, lng=$lng');
+        _showErrorMessage(_locationErrorMessage);
         setState(() {
           _isLocationLoading = false;
         });
@@ -102,11 +148,15 @@ class _BookingScreenState extends State<BookingScreen> {
 
       // Convert location to address
       try {
+        print('Converting coordinates to address...');
         List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+        print('Received ${placemarks.length} placemarks');
 
         if (placemarks.isEmpty) {
-          _showErrorMessage(
-              'Could not determine your address. Please try again.');
+          _locationErrorMessage =
+              'Could not determine your address. Please try again.';
+          print(_locationErrorMessage);
+          _showErrorMessage(_locationErrorMessage);
           setState(() {
             _isLocationLoading = false;
           });
@@ -135,6 +185,8 @@ class _BookingScreenState extends State<BookingScreen> {
           address = "Current Location";
         }
 
+        print('Address determined: $address');
+
         if (mounted) {
           setState(() {
             if (isPickup) {
@@ -147,7 +199,9 @@ class _BookingScreenState extends State<BookingScreen> {
         }
       } catch (e) {
         print('Error getting address: $e');
-        _showErrorMessage('Error determining your address: ${e.toString()}');
+        _locationErrorMessage =
+            'Error determining your address: ${e.toString()}';
+        _showErrorMessage(_locationErrorMessage);
         if (mounted) {
           setState(() {
             _isLocationLoading = false;
@@ -156,7 +210,8 @@ class _BookingScreenState extends State<BookingScreen> {
       }
     } catch (e) {
       print('Error getting current location: $e');
-      _showErrorMessage('Error getting your location: ${e.toString()}');
+      _locationErrorMessage = 'Error getting your location: ${e.toString()}';
+      _showErrorMessage(_locationErrorMessage);
       if (mounted) {
         setState(() {
           _isLocationLoading = false;
@@ -181,7 +236,58 @@ class _BookingScreenState extends State<BookingScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Settings',
+          onPressed: () async {
+            // Open location settings
+            await _location.requestPermission();
+            await _location.requestService();
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showLocationDebugDialog() async {
+    // Try to get current status
+    String debugInfo = '';
+    try {
+      bool serviceEnabled = await _location.serviceEnabled();
+      loc.PermissionStatus permissionStatus = await _location.hasPermission();
+
+      debugInfo = '''
+• Location services enabled: $serviceEnabled
+• Permission status: $permissionStatus
+• Last error: ${_locationErrorMessage.isNotEmpty ? _locationErrorMessage : 'None'}
+''';
+    } catch (e) {
+      debugInfo = 'Error getting location status: $e';
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Location Status'),
+        content: SingleChildScrollView(
+          child: Text(debugInfo),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _location.requestPermission();
+              await _location.requestService();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
       ),
     );
   }
@@ -207,9 +313,21 @@ class _BookingScreenState extends State<BookingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Zipp',
-                      style: AppTextStyles.appBarTitle,
+                    Row(
+                      children: [
+                        Text(
+                          'Zipp',
+                          style: AppTextStyles.appBarTitle,
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.settings,
+                            color: Colors.white,
+                          ),
+                          onPressed: _showLocationDebugDialog,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(

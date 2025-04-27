@@ -40,8 +40,9 @@ dependencies:
   location: ^5.0.3
   geocoding: ^2.2.0
   flutter_dotenv: ^5.1.0
-  flutter_google_places: ^0.3.0
-  google_maps_webservice: ^0.0.20
+  flutter_google_places_web: ^1.0.0
+#  flutter_google_places: ^0.3.0
+#  google_maps_webservice: ^0.0.20
 
 dev_dependencies:
   flutter_test:

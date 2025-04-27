@@ -70,14 +70,15 @@ class LocationInput extends StatelessWidget {
               style: AppTextStyles.inputText,
             ),
           ),
-          GestureDetector(
-            onTap: onMapTap,
-            child: Icon(
-              Icons.map_outlined,
-              color: Colors.grey.shade400,
-              size: 24,
+          if (onMapTap != null)
+            GestureDetector(
+              onTap: onMapTap,
+              child: Icon(
+                Icons.map_outlined,
+                color: Colors.grey.shade400,
+                size: 24,
+              ),
             ),
-          ),
         ],
       ),
     );
