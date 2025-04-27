@@ -6,6 +6,7 @@ import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../widgets/location_input.dart';
 import '../widgets/custom_button.dart';
+import '../widgets/location_autocomplete.dart';
 import 'map_screen.dart';
 
 class BookingScreen extends StatefulWidget {
@@ -164,6 +165,16 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
+  void _handleLocationSelected(String address, bool isPickup) {
+    setState(() {
+      if (isPickup) {
+        _pickupController.text = address;
+      } else {
+        _destinationController.text = address;
+      }
+    });
+  }
+
   void _showErrorMessage(String message) {
     if (!mounted) return;
 
@@ -223,17 +234,19 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Pickup location section
+                      // Pickup location section with autocomplete
                       Row(
                         children: [
                           Expanded(
-                            child: LocationInput(
+                            child: LocationAutocomplete(
                               hintText: 'Pickup Location',
                               iconBackgroundColor: AppColors.iconGreen,
                               icon: FontAwesomeIcons.locationCrosshairs,
                               controller: _pickupController,
-                              readOnly: false,
+                              onLocationSelected: (address) =>
+                                  _handleLocationSelected(address, true),
                               onMapTap: () => _navigateToMap(true),
+                              isPickup: true,
                             ),
                           ),
                           IconButton(
@@ -249,17 +262,19 @@ class _BookingScreenState extends State<BookingScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Destination section
+                      // Destination section with autocomplete
                       Row(
                         children: [
                           Expanded(
-                            child: LocationInput(
+                            child: LocationAutocomplete(
                               hintText: 'Destination',
                               iconBackgroundColor: AppColors.iconRed,
                               icon: FontAwesomeIcons.locationDot,
                               controller: _destinationController,
-                              readOnly: false,
+                              onLocationSelected: (address) =>
+                                  _handleLocationSelected(address, false),
                               onMapTap: () => _navigateToMap(false),
+                              isPickup: false,
                             ),
                           ),
                           IconButton(

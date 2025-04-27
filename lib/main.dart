@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_webservice/places.dart';
 import 'screens/booking_screen.dart';
 import 'config/app_config.dart';
 
@@ -8,6 +9,9 @@ Future<void> main() async {
 
   // Initialize app configuration
   await AppConfig.init();
+
+  // Initialize Places API
+  GoogleMapsPlaces.init(apiKey: AppConfig.placesApiKey);
 
   // Run the app
   runApp(const MyApp());

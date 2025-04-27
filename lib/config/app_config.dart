@@ -15,8 +15,12 @@ class AppConfig {
 
   // Get Maps API Key from environment or fallback to placeholder
   static String get mapsApiKey {
-    print('MAPS_API_KEY');
     return dotenv.env['MAPS_API_KEY'] ?? 'API_KEY_PLACEHOLDER';
+  }
+
+  // Get Places API Key - same as Maps API key in our implementation
+  static String get placesApiKey {
+    return mapsApiKey;
   }
 
   // This method is for demo purposes only - in a real app, you would use dotenv or similar package
